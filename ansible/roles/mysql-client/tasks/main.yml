@@ -1,0 +1,17 @@
+- name: mysql yum repository is added
+  yum: 
+    name: "{{mysql_package_url}}"
+    state: latest
+  tags: mysql-client
+
+- name: mysql-community-client is installed
+  yum: 
+    name: mysql-community-client
+    state: latest
+  tags: mysql-client
+
+- name: mysql-community-devel is installed
+  yum:
+    name: mysql-community-devel
+    state: latest
+  tags: mysql-client

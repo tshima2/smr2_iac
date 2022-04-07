@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Smr2 template for ALB
+
+Parameters:
+  VPCStack:
+    Type: String
+    Default: smr2-cfn-vpc
+  EC2Stack:
+    Type: String
+    Default: smr2-cfn-ec2
+  DomainName:
+    Type: String
+    Default: 'smooth-running2.org'
+  HostedZoneId:
+    Type: String
+    Default: 'Z044706514ADM0HSZL90N'
+
+Resources:
+  ACM:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub '${DomainName}'
+      DomainValidationOptions:
+        - DomainName: !Sub '${DomainName}'
+          HostedZoneId: !Sub '${HostedZoneId}'
+      SubjectAlternativeNames:
+        - !Sub "*.${DomainName}"
+      ValidationMethod: DNS
+
+  FrontLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ACM
+      DefaultActions:
+        - TargetGroupArn: !Ref FrontLBTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref FrontLB
+
+  FrontLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref AWS::StackName
+      Subnets:
+        - Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet1
+        - Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet2
+      SecurityGroups: 
+        - !Ref SecurityGroupLB
+
+  FrontLBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${AWS::StackName}-tg
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStack}-VPCID
+      Port: 80
+      Protocol: HTTP
+      HealthCheckPath: /
+      Targets:
+        - Id:
+            Fn::ImportValue: !Sub ${EC2Stack}-EC2WebServer01
+        - Id:
+            Fn::ImportValue: !Sub ${EC2Stack}-EC2WebServer02
+
+
+  DnsRecordA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Sub '${HostedZoneId}'
+      Comment: "DNS for ALB"
+      Name: !Sub '${DomainName}'
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt 'FrontLB.CanonicalHostedZoneID'
+        DNSName: !GetAtt 'FrontLB.DNSName'
+
+
+  SecurityGroupLB:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: !Ref AWS::StackName
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStack}-VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  FrontLBEndpoint:
+    Value: !GetAtt FrontLB.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-Endpoint

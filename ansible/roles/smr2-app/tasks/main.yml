@@ -1,0 +1,15 @@
+- name: app directory is exists
+  file: path={{app_dir}} owner={{app_owner}} group={{app_group}} mode=0755 state=directory
+  tags: smr2_app
+
+- name: app-repository is cloned
+  git:
+    repo: "{{app_repo}}"
+    dest: "{{app_dir}}/current"
+  tags: smr2_app
+
+- name: bundle install command is executed
+  command:
+    cmd: "sudo -u {{app_owner}} -i {{rbenv_install_dir}}/rbenv/shims/bundle install"
+    chdir: "{{app_dir}}/current"
+  tags: smr2_app

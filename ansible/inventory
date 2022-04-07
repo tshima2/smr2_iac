@@ -1,0 +1,7 @@
+[app_servers]
+192.168.1.17
+192.168.1.18
+
+[app_servers:vars]
+ansible_user=root
+ansible_python_interpreter=auto_legacy_silent

@@ -1,0 +1,255 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Smr2 template for EC2
+
+Parameters:
+  VPCStack:
+    Type: String
+    Default: smr2-cfn-vpc
+  EC2AMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  KeyName:
+    Description: input EC2 Keyname
+    Type: AWS::EC2::KeyPair::KeyName
+
+Resources:
+  EC2WebServer01:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref EC2AMI
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      SubnetId:
+        Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet1
+      PrivateIpAddress: 10.0.1.10
+      UserData: 
+        Fn::Base64: !Sub
+          - |
+            #! /bin/bash
+            yum update -y
+            
+            ## (1) install MySQL client 
+            MYSQL_PACKAGE_URL="https://dev.mysql.com/get/mysql80-community-release-el7-5.noarch.rpm"
+            yum localinstall -y $MYSQL_PACKAGE_URL
+            yum install -y mysql-community-client
+            yum install -y mysql-community-devel
+            
+            ## (2) install rbenv & ruby
+            yum install -y git
+            yum install -y bzip2 gcc openssl-devel readline-devel zlib-devel gcc-c++ make
+            mkdir -p /opt/local; cd /opt/local
+            git clone https://github.com/sstephenson/rbenv.git rbenv
+            git clone https://github.com/sstephenson/ruby-build.git rbenv/plugins/ruby-build
+            rbenv/plugins/ruby-build/install.sh
+            chown -R ec2-user:ec2-user /opt/local/rbenv
+            echo 'export RBENV_ROOT="/opt/local/rbenv"' >> /etc/profile.d/rbenv.sh
+            echo 'export PATH="/opt/local/rbenv/bin:$PATH"' >> /etc/profile.d/rbenv.sh
+            echo 'eval "$(rbenv init --no-rehash -)"' >> /etc/profile.d/rbenv.sh
+            source /etc/profile.d/rbenv.sh
+            rbenv install 2.7.5
+            rbenv global 2.7.5
+            gem install bundler –no-document
+
+            ## (3) install other middleware
+            curl --silent --location https://rpm.nodesource.com/setup_12.x | bash -
+            yum install -y nodejs
+            curl -sL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo
+            yum install -y yarn
+            yum install -y ImageMagick
+            amazon-linux-extras install -y nginx1
+
+            ## (4) deploy app
+            install -m 775 -o ec2-user -g ec2-user -d /var/www/smr2_app
+            cd /var/www/smr2_app
+            git clone https://github.com/tshima2/smr2_app current 
+            chown -R ec2-user:ec2-user current
+            # cd /var/www/smr2_app/current
+            # sudo -i -u ec2-user bundle install
+
+            ## (5) app settings (unicorn & nginx)
+            install -m 775 -o ec2-user -g ec2-user -d /var/www/smr2_app/current/tmp/sockets
+            install -m 775 -o ec2-user -g ec2-user -d /var/www/smr2_app/current/tmp/pids
+            mkdir -p /var/www/smr2_app/current/tmp/pids            
+            touch /etc/nginx/conf.d/smr2_app.conf
+            cat << EOS >> /etc/nginx/conf.d/smr2_app.conf
+            upstream unicorn {
+              server unix:/var/www/smr2_app/current/tmp/sockets/unicorn.sock;
+            }
+            server {
+              listen 80;
+              server_name smooth-running2.org;
+              root /var/www/smr2_app/current/public;
+              access_log /var/log/nginx/smr2_app_access.log;
+              error_log /var/log/nginx/smr2_app_error.log;
+              location / {
+                proxy_pass http://unicorn;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header Host \$http_host;
+                proxy_set_header X-Real-IP \$remote_addr;
+              }
+            }
+            EOS
+
+            ## (6) create dotenv-file skelton
+            cd /var/www/smr2_app/current
+            touch /var/www/smr2_app/current/.env.production
+            chown ec2-user:ec2-user .env.production
+            cat << EOS >> /var/www/smr2_app/current/.env.production
+            SMR2_APP_DATABASE_HOST=${RdsDbEndPoint}
+            SMR2_APP_DATABASE_USER=${RdsDbUser}
+            SMR2_APP_DATABASE_PASSWORD=${RdsDbPassword}
+            SMR2_APP_BUCKET_HOST="https://s3-ap-northeast-1.amazonaws.com"
+            SMR2_APP_BUCKET_NAME=${S3BucketName}
+            GOOGLEMAP_API_KEY=
+            SECRET_KEY_BASE=
+            AWS_ACCESS_KEY_ID=
+            AWS_SECRET_ACCESS_KEY=
+            EOS
+
+            ## (7) start app
+            # RAILS_ENV=production DISABLE_DATABASE_ENVIRONMENT_CHECK=1 bundle exec rails db:reset        
+            # RAILS_ENV=production bundle exec rails assets:precompile
+            # bundle exec unicorn -c ./config/unicorn/production.rb -E production -D
+            # systemctl start nginx
+            # systemctl enable nginx
+          - {
+            RdsDbEndPoint: !ImportValue smr2-cfn-rds-DBEndpoint,
+            RdsDbUser: !ImportValue smr2-cfn-rds-DBUser,
+            RdsDbPassword: !ImportValue smr2-cfn-rds-DBPassword,
+            S3BucketName:  !ImportValue smr2-cfn-s3-BucketName
+          }
+      SecurityGroupIds:
+        - !Ref EC2SG
+
+  EC2WebServer02:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref EC2AMI
+      InstanceType: t2.micro
+      KeyName: !Ref KeyName
+      SubnetId:
+        Fn::ImportValue: !Sub ${VPCStack}-PublicSubnet2
+      PrivateIpAddress: 10.0.2.10
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #! /bin/bash
+            yum update -y
+            
+            ## (1) install MySQL client 
+            MYSQL_PACKAGE_URL="https://dev.mysql.com/get/mysql80-community-release-el7-5.noarch.rpm"
+            yum localinstall -y $MYSQL_PACKAGE_URL
+            yum install -y mysql-community-client
+            yum install -y mysql-community-devel
+            
+            ## (2) install rbenv & ruby
+            yum install -y git
+            yum install -y bzip2 gcc openssl-devel readline-devel zlib-devel gcc-c++ make
+            mkdir -p /opt/local; cd /opt/local
+            git clone https://github.com/sstephenson/rbenv.git rbenv
+            git clone https://github.com/sstephenson/ruby-build.git rbenv/plugins/ruby-build
+            rbenv/plugins/ruby-build/install.sh
+            chown -R ec2-user:ec2-user /opt/local/rbenv
+            echo 'export RBENV_ROOT="/opt/local/rbenv"' >> /etc/profile.d/rbenv.sh
+            echo 'export PATH="/opt/local/rbenv/bin:$PATH"' >> /etc/profile.d/rbenv.sh
+            echo 'eval "$(rbenv init --no-rehash -)"' >> /etc/profile.d/rbenv.sh
+            source /etc/profile.d/rbenv.sh
+            rbenv install 2.7.5
+            rbenv global 2.7.5
+            gem install bundler –no-document
+
+            ## (3) install other middleware
+            curl --silent --location https://rpm.nodesource.com/setup_12.x | bash -
+            yum install -y nodejs
+            curl -sL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo
+            yum install -y yarn
+            yum install -y ImageMagick
+            amazon-linux-extras install -y nginx1
+
+            ## (4) deploy app
+            install -m 775 -o ec2-user -g ec2-user -d /var/www/smr2_app
+            cd /var/www/smr2_app
+            git clone https://github.com/tshima2/smr2_app current 
+            chown -R ec2-user:ec2-user current
+            # cd /var/www/smr2_app/current
+            # sudo -i -u ec2-user bundle install
+
+            ## (5) app settings (unicorn & nginx)
+            install -m 775 -o ec2-user -g ec2-user -d /var/www/smr2_app/current/tmp/sockets
+            install -m 775 -o ec2-user -g ec2-user -d /var/www/smr2_app/current/tmp/pids
+            touch /etc/nginx/conf.d/smr2_app.conf
+            cat << EOS >> /etc/nginx/conf.d/smr2_app.conf
+            upstream unicorn {
+              server unix:/var/www/smr2_app/current/tmp/sockets/unicorn.sock;
+            }
+            server {
+              listen 80;
+              server_name smooth-running2.org;
+              root /var/www/smr2_app/current/public;
+              access_log /var/log/nginx/smr2_app_access.log;
+              error_log /var/log/nginx/smr2_app_error.log;
+              location / {
+                proxy_pass http://unicorn;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header Host \$http_host;
+                proxy_set_header X-Real-IP \$remote_addr;
+              }
+            }
+            EOS
+
+            ## (6) create dotenv-file skelton
+            cd /var/www/smr2_app/current
+            touch /var/www/smr2_app/current/.env.production
+            chown ec2-user:ec2-user .env.production
+            cat << EOS >> /var/www/smr2_app/current/.env.production
+            SMR2_APP_DATABASE_HOST=${RdsDbEndPoint}
+            SMR2_APP_DATABASE_USER=${RdsDbUser}
+            SMR2_APP_DATABASE_PASSWORD=${RdsDbPassword}
+            SMR2_APP_BUCKET_HOST="https://s3-ap-northeast-1.amazonaws.com"
+            SMR2_APP_BUCKET_NAME=${S3BucketName}
+            GOOGLEMAP_API_KEY=
+            SECRET_KEY_BASE=
+            AWS_ACCESS_KEY_ID=
+            AWS_SECRET_ACCESS_KEY=
+            EOS
+
+            ## (7) start app
+            # RAILS_ENV=production DISABLE_DATABASE_ENVIRONMENT_CHECK=1 bundle exec rails db:reset        
+            # RAILS_ENV=production bundle exec rails assets:precompile
+            # bundle exec unicorn -c ./config/unicorn/production.rb -E production -D
+            # systemctl start nginx
+            # systemctl enable nginx
+          - {
+            RdsDbEndPoint: !ImportValue smr2-cfn-rds-DBEndpoint,
+            RdsDbUser: !ImportValue smr2-cfn-rds-DBUser,
+            RdsDbPassword: !ImportValue smr2-cfn-rds-DBPassword,
+            S3BucketName:  !ImportValue smr2-cfn-s3-BucketName
+          }
+      SecurityGroupIds:
+        - !Ref EC2SG
+
+  EC2SG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: sg for web server
+      VpcId:
+        Fn::ImportValue: !Sub ${VPCStack}-VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 10.0.0.0/16
+          FromPort: 80
+          ToPort: 80
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 22
+          ToPort: 22
+
+Outputs:
+  EC2WebServer01:
+    Value: !Ref EC2WebServer01
+    Export:
+      Name: !Sub ${AWS::StackName}-EC2WebServer01
+  EC2WebServer02:
+    Value: !Ref EC2WebServer02
+    Export:
+      Name: !Sub ${AWS::StackName}-EC2WebServer02

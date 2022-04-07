@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Smr2 template for S3
+
+Parameters: 
+  S3BucketName: 
+    Description:  Smr2-app template for S3-Bucket
+    Type: String
+    Default: smr2-cfn-s3-bucket
+
+Resources: 
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties: 
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      BucketName: !Sub ${S3BucketName}
+
+Outputs:
+  S3BucketName:
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub ${AWS::StackName}-BucketName
+      

@@ -1,0 +1,5 @@
+ansible_become: yes
+app_dir: /var/www/smr2_app
+app_owner: smr_app
+app_group: smr_app
+app_repo: https://github.com/tshima2/smr2_app.git
