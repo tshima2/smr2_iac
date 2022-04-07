@@ -13,4 +13,4 @@ AWSとIac（Infrastrucure As Code）の課題用リポジトリです。
 
 # アプリ構成
   - AWS使用リソース  *EC2/RDS/S3/ELB/ACM
-  - ![構成図](./diagram_drawio.png "smr2_cfn")         
+  - ![構成図](./diagram_drawio.jpg "smr2_cfn")         
