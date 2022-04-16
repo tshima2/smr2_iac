@@ -1,5 +1,8 @@
-ansible_become: yes
+# roles/smr2_app/vars
 app_dir: /var/www/smr2_app
-app_owner: smr_app
-app_group: smr_app
 app_repo: https://github.com/tshima2/smr2_app.git
+app_owner: smr2_app
+app_group: smr2_app
+
+nginx_port: 80
+server_name: smooth-runnning2.org

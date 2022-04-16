@@ -1,7 +1,3 @@
 # common
 users:
-  - { name: smr_app,  password: "$1$ZwLrlNU3$xoUOdfaycI/D5GXl5CAHR.", groups: "wheel"}
-
-# Nginx
-nginx_port: 80
-server_hostname: smooth-runnning2.org
+  - { name: "{{app_owner}}",  group: "{{app_group}}", password: "$1$ZwLrlNU3$xoUOdfaycI/D5GXl5CAHR.", groups: "wheel"}

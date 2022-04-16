@@ -1,16 +1,28 @@
-- name: mysql yum repository is added
+#---------------------------------------
+# 1. community-releaseのリポジトリ追加
+#     - 実行ユーザ：root
+#---------------------------------------
+- name: add mysql repository
   yum: 
     name: "{{mysql_package_url}}"
     state: latest
   tags: mysql-client
 
-- name: mysql-community-client is installed
+#---------------------------------------
+# 2. mysql-community-clientインストール
+#     - 実行ユーザ：root
+#---------------------------------------
+- name: install mysql-community-client
   yum: 
     name: mysql-community-client
     state: latest
   tags: mysql-client
 
-- name: mysql-community-devel is installed
+#---------------------------------------
+# 3. mysql-community-develインストール
+#     - 実行ユーザ：root
+#---------------------------------------
+- name: install mysql-community-devel
   yum:
     name: mysql-community-devel
     state: latest

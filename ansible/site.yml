@@ -1,13 +1,12 @@
 ---
 - name: Install app-user, mysql-client, ruby, smr2-app, unicorn, nginx
   hosts: app_servers
-  remote_user: root
   gather_facts: no
+  remote_user: ec2-user
 
   roles:
     - common
     - mysql-client
+    - nodejs-yarn
     - ruby
     - smr2-app
-    #- unicorn
-    #- nginx
