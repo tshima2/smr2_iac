@@ -1,6 +1,5 @@
 #---------------------------------------
 # 1. ユーザ追加（app_owner）
-#     - 実行ユーザ：root
 #---------------------------------------
 - name: add user (app-owner) 
   user: name={{item.name}} state=present password={{item.password}} groups={{item.groups}}
@@ -9,7 +8,6 @@
 
 #---------------------------------------
 # 2. 鍵認証用ディレクトリ作成
-#     - 実行ユーザ：root
 #---------------------------------------
 - name: ~/.ssh for users exsit
   file: path="/home/{{item.name}}/.ssh" state=directory owner={{item.name}} group={{item.name}} mode=0700
@@ -18,7 +16,6 @@
 
 #---------------------------------------
 # 3. SSH接続設定（公開鍵コピー）
-#     - 実行ユーザ：root
 #---------------------------------------
 - name: authorized keys is deployed
   copy: src="authorized_keys_for_user" dest="/home/{{item.name}}/.ssh/authorized_keys" owner={{item.name}} group={{item.name}} mode=0600
@@ -27,7 +24,6 @@
 
 #---------------------------------------
 # 4. sudo設定
-#     - 実行ユーザ：root
 #---------------------------------------
 - name: sudo configured
   copy: src="sudoers" dest="/etc/sudoers" owner=root group=root mode=0440
@@ -35,7 +31,6 @@
 
 #---------------------------------------
 # 5. sudoユーザ追加設定(root)
-#     - 実行ユーザ：root
 #---------------------------------------
 - name: sudo configured for root
   user: name=root groups=wheel state=present
