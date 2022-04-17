@@ -1,11 +1,42 @@
+#---------------------------------------
+# 1. nodejs12.x インストール
+#---------------------------------------
 - name: Setup nodejs12.x
-  shell: curl -sL https://rpm.nodesource.com/setup_12.x | sudo bash -
+  block:
+    #---------------------------------------
+    # 1.1. カレントバージョンのチェック
+    #---------------------------------------
+    - name: check currnt version
+      shell: " yum list installed nodejs | awk '{ print $2 }' "
+      register: check_result
+      changed_when: no
+    # - name: debug check currnt version
+    #   debug:
+    #     msg: "{{check_result}}"
+    #------------------------------------------------------------
+    # 1.2 指定のバージョンでなければリポジトリ追加スクリプトを取得
+    #------------------------------------------------------------
+    - name: Get setup script from nodesource
+      get_url: url="https://rpm.nodesource.com/setup_12.x" dest=/tmp/nodejs_setup_12.x force=true
+      when: nodejs_version not in check_result.stdout  
+    #------------------------------------------------------------
+    # 1.3 指定のバージョンでなければインストール実行
+    #------------------------------------------------------------
+    - name: Do setup
+      shell: bash - /tmp/nodejs_setup_12.x
+      when: nodejs_version not in check_result.stdout
   tags: yarn
 
+#---------------------------------------
+# 2. Yarnリポジトリ追加
+#---------------------------------------
 - name: Install yarn package
   get_url: url="https://dl.yarnpkg.com/rpm/yarn.repo" dest=/etc/yum.repos.d/yarn.repo
   tags: yarn
 
+#---------------------------------------
+# 3. Yarnインストール（最新版）
+#---------------------------------------
 - name: Installing yarn
   yum:
     name: yarn

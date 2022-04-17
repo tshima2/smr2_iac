@@ -1,2 +1,2 @@
+nodejs_version: 2:12.22.12-1nodesource
 ansible_become: yes
-ansible_become_method: sudo
