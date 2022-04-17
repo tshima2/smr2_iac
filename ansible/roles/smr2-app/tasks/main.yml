@@ -1,6 +1,5 @@
 #---------------------------------------
 # 1. アプリ配備先ディレクトリ作成
-#     - 実行ユーザ：root
 #---------------------------------------
 - name: create app directory
   file: 
@@ -10,24 +9,19 @@
     mode: 0755 
     state: directory
   become: yes
-  become_method: sudo
-  become_user: root
   tags: smr2_app
 
 #------------------------------------------
 # 2. アプリ用コードをリポジトリからクローン
 #     - 実行ユーザ：app_owner
-#     - notify    : --> 3. bundle install 
 #------------------------------------------
 - name: clone code from app-repo
   git:
     repo: "{{app_repo}}"
     dest: "{{app_dir}}/current"
   become: yes
-  become_method: sudo
   become_user: "{{app_owner}}"
   register: clone_results
-  notify: bundle install
   tags: smr2_app
 
 #---------------------------------------
@@ -47,9 +41,8 @@
   command:
     cmd: "{{rbenv_install_dir}}/rbenv/shims/bundle install"
     chdir: "{{app_dir}}/current"
-# when: clone_results.changed
+  when: clone_results.changed
   become: yes
-  become_method: sudo
   become_user: "{{app_owner}}"
   register: bundle_install_results
   tags: smr2_app
@@ -86,7 +79,6 @@
 
 #---------------------------------------
 # 5. nginx設定
-#     - 実行ユーザ：root
 #---------------------------------------
 - name: configure nginx
   block:
@@ -110,8 +102,8 @@
         owner: root
         group: root
         mode: 0644
+
   become: yes
-  become_method: sudo
   tags: smr2_app
 
 #----------------------------------------------------------
@@ -128,13 +120,14 @@
       copy: 
         src: ".env.skelton"
         dest: "{{app_dir}}/current/.env.production"
+        force: no
         owner: "{{app_owner}}"
         group: "{{app_owner}}" 
-        mode: 0600
+        mode: 0644
     #-------------------------------------------------
     # 6-1 '^SECRET_KEY_BASE'にマッチする行を置き換える
     #-------------------------------------------------
-    - name: get value
+    - name: get new value
       shell: bash -lc "RAILS_ENV=production bundle exec rails secret"
       args:
         chdir: "{{app_dir}}/current"
@@ -147,7 +140,6 @@
         line: "SECRET_KEY_BASE={{secret_key_base_result.stdout}}"
 
   become: yes
-  become_method: sudo
   become_user: "{{app_owner}}"
   tags: smr2_app
 
@@ -158,14 +150,15 @@
   block:
     #----------------------------
     # 8-1. assets プリコンパイル
-    #   - 実行ユーザ: app_owner
+    #     - 実行ユーザ: app_owner
+    #     - 条件      : changed (2項)
     #----------------------------
     - name: assets are precompiled
       shell: bash -lc "RAILS_ENV=production bundle exec rails assets:precompile"
       args:
         chdir: "{{app_dir}}/current"
+      when: clone_results.changed
       become: yes
-      become_method: sudo
       become_user: "{{app_owner}}"
 
     #----------------------------
@@ -177,12 +170,10 @@
     #   args:
     #     chdir: "{{app_dir}}/current"
     #   become: yes
-    #   become_method: sudo
     #   become_user: "{{app_owner}}"
   
     #----------------------------
     # 8-3. nginx 起動
-    #   - 実行ユーザ: root
     #----------------------------
     # - name: nginx started
     #   systemd: 
@@ -191,5 +182,4 @@
     #     daemon_reload: yes
     #     enabled: no
     #   become: yes
-    #   become_method: sudo
   tags: smr2_app
