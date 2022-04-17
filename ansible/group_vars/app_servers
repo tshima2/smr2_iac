@@ -1,3 +1,0 @@
-# common
-users:
-  - { name: "{{app_owner}}",  group: "{{app_group}}", password: "$1$ZwLrlNU3$xoUOdfaycI/D5GXl5CAHR.", groups: "wheel"}
