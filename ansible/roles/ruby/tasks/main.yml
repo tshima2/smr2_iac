@@ -1,32 +1,27 @@
 #--------------------------------------------
 # 1. rubyビルド用モジュールインストール
-#     - 実行ユーザ：root
 #--------------------------------------------
 - name: install dependencies
   yum: 
     name: git, bzip2, gcc, openssl-devel, readline-devel, zlib-devel, gcc-c++, make
     state: latest
-  become: yes
-  become_method: sudo
   tags: ruby
 
 #---------------------------------------------------
 # 2. RubyGem取得先のホスト定義（名前解決エラーに対処）
-#     - 実行ユーザ：root
 #---------------------------------------------------
 - name: define rubygem repository hosts 
   copy: src="hosts" dest="/etc/hosts" owner=root group=root mode=0644
-  become: yes
-  become_method: sudo
   tags: ruby
 
-#---------------------------------------------------
+#---------------------------------------------------------------
 # 3. Rubyのバージョンチェック
-#     - 実行結果はokに固定
-#---------------------------------------------------
+#     - 実行結果はokに固定, stdoutに出力されるバージョンで判定
+#---------------------------------------------------------------
 - name: specified ruby version is installed
   shell: bash -lc "ruby --version"
   register: result01
+  changed_when: no
   failed_when: no
   tags: ruby
 
@@ -40,7 +35,6 @@
 
 #-----------------------------------------------------------------
 # 4. Rubyインストール
-#     - 実行ユーザ：root
 #     - 条件： 3項で取得したバージョンが指定バージョンと異なる場合
 #-----------------------------------------------------------------
 - name: rbenv and ruby install
