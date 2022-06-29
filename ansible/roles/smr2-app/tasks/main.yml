@@ -1,7 +1,17 @@
 #---------------------------------------
-# 1. アプリ配備先ディレクトリ作成
+# 0. ImageMagickインストール
 #---------------------------------------
-- name: create app directory
+- name: install_imagemagick
+  yum:
+    name: ImageMagick
+    state: latest
+  become: yes
+  tags: smr2_app
+
+#---------------------------------------
+# 1. ベースディレクトリ作成
+#---------------------------------------
+- name: create app_base_directory
   file: 
     path: "{{app_dir}}" 
     owner: "{{app_owner}}" 
@@ -11,10 +21,20 @@
   become: yes
   tags: smr2_app
 
-#------------------------------------------
-# 2. アプリ用コードをリポジトリからクローン
+#------------------------------------------------
+# 2. 配備先ディレクトリへのクローン実行済みチェック 
+#------------------------------------------------
+- name: check app_clone_is_done 
+  stat:
+    path: "{{app_dir}}/current/README.md"
+  register: check_readme_md_result
+  tags: smr2_app
+ 
+#-------------------------------------------------------------
+# 3. アプリ用コードをリポジトリからクローン
+#     - 配備先ディレクトリが存在しない（clone未実施）場合のみ実行
 #     - 実行ユーザ：app_owner
-#------------------------------------------
+#-------------------------------------------------------------
 - name: clone code from app-repo
   git:
     repo: "{{app_repo}}"
@@ -23,23 +43,24 @@
   become_user: "{{app_owner}}"
   register: clone_results
   tags: smr2_app
+  when: not check_readme_md_result.stat.exists
 
 #---------------------------------------
-# （2項 デバッグ用）クローン結果を表示 
+# （3項 デバッグ用）クローン結果を表示 
 #---------------------------------------
-# - name: clone results from app-repo
-#   debug:
-#     msg: "{{clone_results}}"
-#   tags: smr2_app
+- name: clone results from app-repo
+  debug:
+    msg: "{{clone_results}}"
+  tags: smr2_app
 
 #---------------------------------------
-# 3. bundle install
+# 4. bundle install
 #     - 実行ユーザ：app_owner
 #     - 条件      : changed (2項)
 #---------------------------------------
 - name: bundle install
   command:
-    cmd: "{{rbenv_install_dir}}/rbenv/shims/bundle install"
+    cmd: "{{rbenv_install_dir}}/rbenv/shims/bundle install --path vendor/bundle"
     chdir: "{{app_dir}}/current"
   when: clone_results.changed
   become: yes
@@ -48,15 +69,15 @@
   tags: smr2_app
 
 #---------------------------------------
-# （3項 デバッグ用）bundle install結果
+# （4項 デバッグ用）bundle install結果
 #---------------------------------------
-# - name: bundle install results
-#   debug:
-#     msg: "{{bundle_install_results}}"
-#   tags: smr2_app
+- name: bundle install results
+  debug:
+    msg: "{{bundle_install_results}}"
+  tags: smr2_app
 
 #---------------------------------------------
-# 4. unicorn用ソケットファイル格納ディレクトリ
+# 5. unicorn用ソケットファイル格納ディレクトリ
 #     - 実行ユーザ：app_owner
 #---------------------------------------------
 - name: working directory for unicorn
@@ -78,12 +99,29 @@
   tags: smr2_app
 
 #---------------------------------------
-# 5. nginx設定
+# 6. nginxインストール
+#---------------------------------------
+- name: install nginx
+  block:
+  #- name: install_nginx_via_yum
+  #  yum: name=nginx state=present
+  #  become: yes
+  #  register: installed_nginx
+  #  ignore_erros: yes
+
+  - name: alternatively_install_nginx_via_amazon-linux-extras_nginx
+    command: amazon-linux-extras install -y nginx1
+  #  when: installed_nginx is failed
+    become: yes
+
+  tags: smr2_app
+#---------------------------------------
+# 7. nginx設定
 #---------------------------------------
 - name: configure nginx
   block:
     #-----------------------------------
-    # 6-1. 設定ファイル格納用ディレクトリ
+    # 7-1. 設定ファイル格納用ディレクトリ
     #-----------------------------------
     - name: directory for configuration file
       file:
@@ -93,7 +131,7 @@
         mode: 0775
         state: directory
     #-----------------------------------
-    # 6-2. 設定ファイルコピー
+    # 7-2. 設定ファイルコピー
     #-----------------------------------
     - name: copy configuration file
       template:
@@ -102,30 +140,44 @@
         owner: root
         group: root
         mode: 0644
-
   become: yes
   tags: smr2_app
 
-#----------------------------------------------------------
-# 6 .envファイル設定
-#     - 既存の.env.production内の環境変数定義に値を挿入する
+#-----------------------------------------------------------
+# 8 配備先ディレクトリ内 .envファイルの存在チェック 
+#-----------------------------------------------------------
+- name: check .env.production file is exists 
+  stat:
+    path: "{{app_dir}}/current/.env.production"
+  register: check_env_production_result
+  tags: smr2_app
+
+#-------------------------------------------------------------------------------
+# 9 .envファイル設定
+#     - 実行は配備先ディレクトリに.envファイルが存在しない場合のみ
 #     - 実行ユーザ: app_owner
-#----------------------------------------------------------
+#     - (1)UserDataで用意されているベースディレクトリのひな形.envファイルを配備先にコピー
+#     - (2)SECRET_BASEなどの値を挿入
+#--------------------------------------------------------------------------------
 - name: set values into .env.production
   block: 
-    #-----------------------------------------
-    # 6-0 copy skelton file (for development)
-    #-----------------------------------------
-    - name: copy .env skelton file 
+    #--------------------------------------------------
+    # 9-0 copy .env skelton(prepared in UserData) file
+    #--------------------------------------------------
+    - name: copy .env skelton file from app_dir to clone_dir 
       copy: 
-        src: ".env.skelton"
+#        src: ".env.skelton"
+        remote_src: yes
+        src:  "{{app_dir}}/.env.production"
         dest: "{{app_dir}}/current/.env.production"
         force: no
         owner: "{{app_owner}}"
         group: "{{app_owner}}" 
         mode: 0644
+      become: yes
+      become_user: root
     #-------------------------------------------------
-    # 6-1 '^SECRET_KEY_BASE'にマッチする行を置き換える
+    # 9-1 '^SECRET_KEY_BASE'にマッチする行を置き換える
     #-------------------------------------------------
     - name: get new value
       shell: bash -lc "RAILS_ENV=production bundle exec rails secret"
@@ -141,15 +193,16 @@
 
   become: yes
   become_user: "{{app_owner}}"
+  when: not check_env_production_result.stat.exists
   tags: smr2_app
 
 #---------------------------------------
-# 8. アプリ起動
+# 10. アプリ起動
 #---------------------------------------
 - name: start app (block) 
   block:
     #----------------------------
-    # 8-1. assets プリコンパイル
+    # 10-1. assets プリコンパイル
     #     - 実行ユーザ: app_owner
     #     - 条件      : changed (2項)
     #----------------------------
@@ -157,29 +210,30 @@
       shell: bash -lc "RAILS_ENV=production bundle exec rails assets:precompile"
       args:
         chdir: "{{app_dir}}/current"
-      when: clone_results.changed
       become: yes
       become_user: "{{app_owner}}"
 
     #----------------------------
-    # 8-2. unicorn 起動
-    #   - 実行ユーザ: app_owner
+    # 10-2. unicorn 起動
+    #     - 実行ユーザ: app_owner
     #----------------------------
-    # - name: unicorn started
-    #   shell: bash -lc "bundle exec unicorn -c ./config/unicorn/production.rb -E production -D"
-    #   args:
-    #     chdir: "{{app_dir}}/current"
-    #   become: yes
-    #   become_user: "{{app_owner}}"
+    - name: unicorn started
+      shell: bash -lc "bundle exec unicorn -c ./config/unicorn/production.rb -E production -D"
+      args:
+        chdir: "{{app_dir}}/current"
+      become: yes
+      become_user: "{{app_owner}}"
   
     #----------------------------
-    # 8-3. nginx 起動
+    # 10-3. nginx 起動
     #----------------------------
-    # - name: nginx started
-    #   systemd: 
-    #     name: nginx.service 
-    #     state: restarted 
-    #     daemon_reload: yes
-    #     enabled: no
-    #   become: yes
+    - name: nginx started
+      systemd: 
+        name: nginx.service 
+        state: restarted 
+        daemon_reload: yes
+        enabled: yes
+      become: yes
+  when: clone_results.changed
   tags: smr2_app
+

@@ -1,0 +1,15 @@
+require 'spec_helper'
+
+# S3バケットに接続できることのテスト
+require 'smr2_app_env'
+#require 'byebug'; byebug
+unless $ha_env[KeywordS3Bucket].empty?
+  describe command("aws s3 ls #{$ha_env[KeywordS3Bucket]}") do
+    its(:stderr) { should_not contain('Unable to locate credentials') }
+    its(:stderr) { should_not contain('NoSuchBucket') }
+  end
+else
+  describe 'backet-name NOT FOUND in env.production file' do
+    it { expect($ha_env[KeywordS3Bucket]).not_to eq "" }
+  end
+end
