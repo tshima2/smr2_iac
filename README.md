@@ -2,6 +2,7 @@
 AWSとIac（Infrastrucure As Code）習得のため作成した、自作地図関連アプリのインフラ構築用コードです。
   - AWS CloudFormationテンプレート
   - Ansibleでのアプリ構築・設定
+  - ServerSpec試験コード  
   
 # 対象アプリ
   - アプリ名　  
