@@ -1,6 +1,5 @@
 # 概要
-AWSとIac（Infrastrucure As Code）の課題用リポジトリです。
-RubyOnRailsで自作した地図関連アプリのインフラ構築用コードを下記内容にて作成しました。
+AWSとIac（Infrastrucure As Code）習得のため作成した、自作地図関連アプリのインフラ構築用コードです。
   - AWS CloudFormationテンプレート
   - Ansibleでのアプリ構築・設定
   
